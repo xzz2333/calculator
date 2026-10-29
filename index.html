@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>大米配方成本计算器</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f0f2f5; margin: 0; padding-bottom: 30px; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 15px; }
+        h3 { margin-top: 0; margin-bottom: 15px; color: #333; font-size: 16px; border-left: 4px solid #07c160; padding-left: 10px; line-height: 1.2; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* 表单行样式 */
+        .input-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+        .input-row label { font-size: 14px; color: #666; white-space: nowrap; }
+        .input-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; text-align: right; box-sizing: border-box; width: 100%; }
+        .input-row input:focus { border-color: #07c160; outline: none; background: #fafffb; }
+        
+        /* 原料区域特殊样式 */
+        .ingredient-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
+        .ingredient-row input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; text-align: right; min-width: 0; }
+        .ingredient-row .label-mini { font-size: 12px; color: #888; }
+        .btn-del { background: #ff4d4f; color: white; border: none; border-radius: 6px; padding: 8px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+        .btn-add { width: 100%; padding: 12px; background: #e8f5e9; color: #2e7d32; border: 1px dashed #81c784; border-radius: 8px; font-size: 14px; font-weight: bold; margin-top: 5px; cursor: pointer; }
+        
+        /* 结果区域 */
+        .result { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); padding: 20px; border-radius: 12px; text-align: center; margin-top: 20px; }
+        .result-item { margin: 12px 0; font-size: 15px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+        .result-value { font-size: 22px; font-weight: bold; color: #d32f2f; }
+        .unit { font-size: 14px; color: #666; margin-left: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h3>成品信息</h3>
+        <div class="input-row">
+            <label>规格 (KG)</label>
+            <input type="number" id="spec" value="10" oninput="calculate()">
+        </div>
+        <div class="input-row">
+            <label>得率 (%)</label>
+            <input type="number" id="yieldRate" value="99" oninput="calculate()">
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>产品配方</h3>
+        <div id="ingredientsContainer">
+            <!-- 动态生成的原料行会放在这里 -->
+        </div>
+        <button class="btn-add" onclick="addIngredient()">➕ 新增一种原料</button>
+    </div>
+
+    <div class="card">
+        <h3>其他费用 (元/包)</h3>
+        <div class="input-row">
+            <label>包装费</label>
+            <input type="number" id="packagingFee" value="4.33" step="0.01" oninput="calculate()">
+        </div>
+        <div class="input-row">
+            <label>加工费</label>
+            <input type="number" id="processingFee" value="1.5" step="0.01" oninput="calculate()">
+        </div>
+        <div class="input-row">
+            <label>搬运费</label>
+            <input type="number" id="transportFee" value="0.415" step="0.01" oninput="calculate()">
+        </div>
+    </div>
+
+    <div class="result">
+        <div class="result-item">
+            <span>单包生产成本：</span>
+            <span><span class="result-value" id="totalCost">0.00</span> <span class="unit">元</span></span>
+        </div>
+        <div class="result-item" style="border-top: 1px dashed #a5d6a7; padding-top: 12px; margin-top: 12px;">
+            <span>折合每斤成本：</span>
+            <span><span class="result-value" id="unitCost">0.00</span> <span class="unit">元/斤</span></span>
+        </div>
+    </div>
+
+    <script>
+        // 初始化默认的三种原料 (比例, 价格)
+        let ingredientsData = [
+            { ratio: 0.7, price: 2.9 },
+            { ratio: 0.3, price: 5.45 },
+            { ratio: 0, price: 0 }
+        ];
+
+        function renderIngredients() {
+            const container = document.getElementById('ingredientsContainer');
+            container.innerHTML = '';
+
+            ingredientsData.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'ingredient-row';
+                
+                div.innerHTML = `
+                    <span style="font-size:13px; color:#333; font-weight:bold; width: 45px;">原料${index + 1}</span>
+                    <div style="display:flex; flex:1; gap:8px; align-items:center;">
+                        <div style="flex:1; display:flex; align-items:center;">
+                            <span class="label-mini">比例</span>
+                            <input type="number" step="0.01" value="${item.ratio}" oninput="updateData(${index}, 'ratio', this.value)">
+                        </div>
+                        <div style="flex:1; display:flex; align-items:center;">
+                            <span class="label-mini">价格</span>
+                            <input type="number" step="0.01" value="${item.price}" oninput="updateData(${index}, 'price', this.value)">
+                        </div>
+                    </div>
+                    <button class="btn-del" onclick="removeIngredient(${index})">删除</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updateData(index, field, value) {
+            ingredientsData[index][field] = parseFloat(value) || 0;
+            calculate();
+        }
+
+        function addIngredient() {
+            ingredientsData.push({ ratio: 0, price: 0 });
+            renderIngredients();
+            calculate();
+        }
+
+        function removeIngredient(index) {
+            if (ingredientsData.length <= 1) {
+                alert('至少要保留一种原料哦！');
+                return;
+            }
+            ingredientsData.splice(index, 1);
+            renderIngredients();
+            calculate();
+        }
+
+        // 精准四舍五入函数 (解决浮点数导致末尾为5时少1的Bug)
+        function preciseRound(num, decimals) {
+            return Number(Math.round(Number(num + 'e' + decimals)) + 'e-' + decimals);
+        }
+
+        function calculate() {
+            let spec = parseFloat(document.getElementById('spec').value) || 0;
+            let yieldRate = (parseFloat(document.getElementById('yieldRate').value) || 0) / 100;
+            if (yieldRate === 0) yieldRate = 1;
+
+            let packaging = parseFloat(document.getElementById('packagingFee').value) || 0;
+            let processing = parseFloat(document.getElementById('processingFee').value) || 0;
+            let transport = parseFloat(document.getElementById('transportFee').value) || 0;
+
+            // 1. 计算所有原料的加权成本 (保留真实精度)
+            let rawMaterialTotalCost = 0;
+            ingredientsData.forEach(item => {
+                rawMaterialTotalCost += (item.ratio * item.price);
+            });
+
+            // 2. 计算单包生产成本
+            let totalCost = (rawMaterialTotalCost * spec * 2 / yieldRate) + packaging + processing + transport;
+            
+            // 3. 计算每斤成本
+            let unitCost = totalCost / (spec * 2);
+
+            // 应用精度修正，保留两位小数
+            let finalTotalCost = preciseRound(totalCost, 2);
+            let finalUnitCost = preciseRound(unitCost, 2);
+
+            // 显示结果
+            document.getElementById('totalCost').innerText = finalTotalCost.toFixed(2);
+            document.getElementById('unitCost').innerText = finalUnitCost.toFixed(2);
+        }
+
+        renderIngredients();
+        calculate();
+    </script>
+</body>
+</html>
